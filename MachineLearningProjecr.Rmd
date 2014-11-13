@@ -1,0 +1,67 @@
+---
+title: "MachineLearningProject"
+output: html_document
+---
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+```{r echo=TRUE,eval=TRUE}
+library(caret)
+library(ggplot2)
+library(randomForest)
+set.seed(614)
+library(lattice)
+pml.training<-read.csv("pml-training.csv")
+inTrain<-createDataPartition(y=pml.training$classe,p=0.9,list=FALSE)
+training<-pml.training[inTrain,]
+testing<-pml.training[-inTrain,]
+```
+
+The data is first read using "read.csv()". Once the data is read, 90 percent of subsample is used to train the model. and 10 percent sample is used for cross-validation. Since the processing time is large enough, Stochastic Gradient Boosting algorithm via the gbm package.
+```{r echo=TRUE,eval=TRUE}
+ptm<-proc.time()
+modFit <- train(classe ~ user_name + pitch_arm + yaw_arm + roll_arm + roll_belt + pitch_belt + yaw_belt + gyros_belt_x + gyros_belt_y + gyros_belt_z + accel_belt_x + accel_belt_y + accel_belt_z + magnet_belt_x + magnet_belt_y + magnet_belt_z + gyros_arm_x + gyros_arm_y + gyros_arm_z + accel_arm_x + accel_arm_y + accel_arm_z + magnet_arm_x + magnet_arm_y + magnet_arm_z + roll_dumbbell + pitch_dumbbell + yaw_dumbbell, method="gbm", data=training, verbose=FALSE)
+proc.time() - ptm
+```
+"proc.time()" and "ptm" are used to capture the processing. It tok about 30 mins to execute
+```{r echo=TRUE,eval=TRUE}
+print(modFit)
+predictTr<-predict(modFit,training)
+table(predictTr,training$classe)
+```
+The model correctly classifies 93.6 percent of the observations in the training sample using 150 trees. The "roll_belt"  and "yaw_belt" features were by far the most important in terms of variable influence. 
+```{r echo=TRUE,eval=TRUE}
+summary(modFit,n.trees=150)
+```
+A plot of these features colored by outcome demonstrates their relative importance.
+```{r echo=TRUE,eval=TRUE}
+qplot(roll_belt, yaw_belt,colour=classe,data=training)
+```
+Even though these are the top features, they're still not great predictors in their own right. Nonetheless, you can see some bunching in this simple plot. This confirms the choice of a boosting algorithm as a good choice given the large set of relatively weak predictors. This next plot further demonstrates the improved performance gained by using boosting iterations.
+```{r echo=TRUE,eval=TRUE}
+ggplot(modFit)
+```
+Finally the performance on the  10 subsample 
+```{r echo=TRUE,eval=TRUE}
+predictTe<-predict(modFit,testing)
+table(predictTe,testing$classe)
+```
+The algorithm actually peforms only does slightly worse on the testing subset than it did on the full training set, correctly classifying 93.4 percent of the observations.
+
+***Prediction the test set***
+
+I use the algorithm to predict using the testing set. The results are run through the pml_write_files() function from the course Coursera site, and stored for submission. 
+```{r echo=TRUE,eval=TRUE}
+pml.testing <- read.csv("pml-testing.csv")
+answers <- as.character(predict(modFit, pml.testing))
+pml_write_files = function(x){
+
+  n = length(x)
+	for(i in 1:n){
+		filename = paste0("problem_id_",i,".txt")
+		write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+	}
+}
+pml_write_files(answers)
+```
+After submitting these answers, it turns out that the algorithm correctly predicted the outcome for 20/20 observations further confirming its strong out-of-sample classification accuracy. 
